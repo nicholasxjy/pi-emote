@@ -24,9 +24,14 @@ export class SideEditor extends CustomEditor {
   private editorHeight = 0;
 
   constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, deps: SideEditorDeps) {
-    super(tui, theme, keybindings, { embedWorkingStatus: true });
+    super(tui, theme, keybindings, { embedWorkingStatus: true, paddingX: 2 });
     this.deps = deps;
     deps.animator.setTui(tui);
+  }
+
+  setPaddingX(padding: number): void {
+    super.setPaddingX(padding);
+    super.setPaddingX(Math.max(2, this.getPaddingX()));
   }
 
   render(width: number): string[] {
@@ -36,13 +41,14 @@ export class SideEditor extends CustomEditor {
     this.gutter = frame && width >= config.hideBelow && width > avatarWidth + 5 ? avatarWidth + 4 : 0;
     this.editorWidth = Math.max(1, width - this.gutter);
 
+    const theme = this.deps.getTheme();
     const editorLines = super.render(this.editorWidth);
+    if (this.editorWidth >= 3) editorLines[1] = theme.fg("accent", "❯") + editorLines[1].slice(1);
     this.editorHeight = editorLines.length;
     const [topBorder, ...content] = editorLines;
     content.push(...(this.deps.footer?.render(this.editorWidth) ?? []));
     if (!this.gutter || !frame) return [topBorder, ...content];
 
-    const theme = this.deps.getTheme();
     const thinkingLevel = this.deps.pi.getThinkingLevel?.() ?? "high";
     const thinking = theme.getThinkingBorderColor?.(thinkingLevel) ?? ((s: string) => theme.fg("border", s));
     const border = colorStyler(config.theme.border ?? "thinking-level-color", thinking, theme);

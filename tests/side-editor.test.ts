@@ -84,8 +84,8 @@ test("side layout keeps a full-width top border and uses Pi's native footer", ()
   const lines = editor.render(80);
   assert.equal(lines.length, 6);
   assert.equal(lines[0], "─".repeat(80));
-  assert.ok(lines[1].startsWith("          │ 你好"));
-  assert.equal(visibleWidth(lines[1].split(CURSOR_MARKER)[0]), 16);
+  assert.ok(lines[1].startsWith("          │ ❯ 你好"));
+  assert.equal(visibleWidth(lines[1].split(CURSOR_MARKER)[0]), 18);
   assert.equal(lines[2].slice(12), "─".repeat(68));
   assert.deepEqual(lines.slice(3).map((line) => line.slice(12)), footer.render(68));
   assert.ok(lines.every((line) => visibleWidth(line) <= 80));
@@ -99,6 +99,27 @@ test("side layout keeps a full-width top border and uses Pi's native footer", ()
   editor.onEscape = () => { interrupted = true; };
   editor.handleInput("\x1b");
   assert.equal(interrupted, true);
+});
+
+test("prompt stays in native padding for empty and multiline input", () => {
+  const { editor } = setup();
+  editor.setPaddingX(0);
+  const empty = editor.render(80);
+  assert.ok(empty[1].startsWith("          │ ❯ " + CURSOR_MARKER));
+  assert.equal(visibleWidth(empty[1].split(CURSOR_MARKER)[0]), 14);
+
+  editor.setText("first\nsecond");
+  const lines = editor.render(80);
+  assert.ok(lines[1].startsWith("          │ ❯ first"));
+  assert.ok(lines[2].startsWith("          │   second"));
+  assert.equal(lines.join("\n").split("❯").length - 1, 1);
+  assert.equal(editor.getText(), "first\nsecond");
+  assert.ok(lines.every((line) => visibleWidth(line) <= 80));
+
+  editor.setText("a");
+  const tiny = editor.render(2);
+  assert.ok(tiny[1].startsWith("a"));
+  assert.ok(!tiny[1].includes("❯"));
 });
 
 test("native footer details and updates pass through without emote formatting", () => {
@@ -135,7 +156,7 @@ test("narrow terminals and missing frames keep the full-width editor and native 
   editor.setText("message");
   const narrow = editor.render(30);
   assert.equal(narrow[0], "─".repeat(30));
-  assert.ok(narrow[1].startsWith("message"));
+  assert.ok(narrow[1].startsWith("❯ message"));
   assert.equal(visibleWidth(narrow[1]), 30);
   assert.equal(narrow[2], "─".repeat(30));
   assert.deepEqual(narrow.slice(3), footer.render(30));
@@ -148,9 +169,11 @@ test("mouse clicks use editor coordinates after adding the avatar", () => {
   const { editor } = setup();
   editor.setText("abcdef\nsecond");
   editor.render(80);
-  editor.handleMouse(click(14, 1));
+  editor.handleMouse(click(12, 1));
+  assert.deepEqual(editor.getCursor(), { line: 0, col: 0 });
+  editor.handleMouse(click(16, 1));
   assert.deepEqual(editor.getCursor(), { line: 0, col: 2 });
-  editor.handleMouse(click(13, 2));
+  editor.handleMouse(click(15, 2));
   assert.deepEqual(editor.getCursor(), { line: 1, col: 1 });
   assert.equal(editor.handleMouse(click(1, 1)), undefined);
   assert.equal(editor.handleMouse(click(14, 4)), undefined);
