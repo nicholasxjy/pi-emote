@@ -80,9 +80,9 @@ See `config.json` in the extension root for all defaults.
 }
 ```
 
-Side layout replaces the model/usage panel and removes the horizontal borders above and below the input. The editor keeps its shortcuts, history, and autocomplete. Below `hideBelow`, the avatar is hidden and the editor uses the full width.
+Side layout hides pi-emote's model/usage panel and places Pi's editor and native status bar beside the avatar. A horizontal border spans the top, including Pi's working indicator; the input's bottom border stays hidden. The editor keeps its shortcuts, history, and autocomplete. Below `hideBelow`, the avatar is hidden and the editor and status bar use the full width.
 
-This layout supplies its own editor and status bar, showing the directory, git branch, session name, token usage, context percentage, model, and extension statuses. Other extensions that replace the editor or footer can override it.
+The status bar is rendered by Pi's existing footer component, preserving its model, subscription, context, and extension status information. Other extensions that replace the editor or footer can override this layout.
 
 ### Theme
 

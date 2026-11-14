@@ -61,7 +61,7 @@ export function colorStyler(color: WidgetColor, thinking: (s: string) => string,
   return (s: string) => theme.fg(color, s);
 }
 
-export function buildInfoLines(infoWidth: number, ctxRef: any, pi: any, theme: any, config: Config): string[] {
+function buildInfoLines(infoWidth: number, ctxRef: any, pi: any, theme: any, config: Config): string[] {
   const lines: string[] = [];
   if (!ctxRef) return lines;
 

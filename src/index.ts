@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ReadonlyFooterDataProvider } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, FooterComponent } from "@earendil-works/pi-coding-agent";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, readdirSync } from "node:fs";
@@ -16,7 +16,7 @@ import { TmuxITermRenderer } from "./render_tmux_iterm.js";
 import { AsciiRenderer } from "./render_ascii.js";
 import { Animator } from "./animator.js";
 import { createWidgetFactory } from "./widget.js";
-import { SideEditor } from "./side-editor.js";
+import { SideEditor, findNativeFooter } from "./side-editor.js";
 import { resolveRenderer } from "./terminal.js";
 
 const IMAGE_STATES = ["hi", "idle", "think", "talk", "read", "write", "tool", "success", "failure", "compact"];
@@ -172,17 +172,16 @@ export default function (pi: ExtensionAPI) {
       getCurrentEmoteSet: () => currentEmoteSet,
     };
     if (config.layout === "side") {
-      let footerData: ReadonlyFooterDataProvider | undefined;
-      ctx.ui.setFooter((tui, _theme, data) => {
-        footerData = data;
-        const unsubscribe = data.onBranchChange(() => tui.requestRender());
-        return { render: () => [], invalidate() {}, dispose: unsubscribe };
+      let footer: FooterComponent | undefined;
+      ctx.ui.setEditorComponent((tui, theme, keybindings) => {
+        footer ??= findNativeFooter(tui);
+        return new SideEditor(tui, theme, keybindings, {
+          ...deps,
+          getTheme: () => ctx.ui.theme,
+          footer,
+        });
       });
-      ctx.ui.setEditorComponent((tui, theme, keybindings) => new SideEditor(tui, theme, keybindings, {
-        ...deps,
-        getTheme: () => ctx.ui.theme,
-        getFooterData: () => footerData,
-      }));
+      if (footer) ctx.ui.setFooter(() => ({ render: () => [], invalidate() {} }));
       sideLayoutActive = true;
     } else {
       ctx.ui.setWidget("emote", createWidgetFactory(deps), { placement: "aboveEditor" });
