@@ -1,7 +1,7 @@
 import type { TUI } from "@earendil-works/pi-tui";
 import type { EmoteState, Config, EmotesConfig } from "./types.js";
 import type { Renderer, RenderedFrame } from "./renderer.js";
-import { log } from "./log.js";
+import { log } from "./log.ts";
 
 // --- Helpers ---
 
@@ -17,6 +17,9 @@ export class Animator {
 
   // Renderer
   private renderer: Renderer;
+  private tuiRef: TUI | null = null;
+  private overlayVisible = false;
+  private frameBeforeOverlay: RenderedFrame | null = null;
   private config: Config;
   private emotesConfig: EmotesConfig = {};
 
@@ -53,9 +56,16 @@ export class Animator {
 
   setRenderer(renderer: Renderer) {
     this.renderer = renderer;
+    this.frameBeforeOverlay = null;
+    this.overlayVisible = false;
   }
 
   setTui(tui: TUI | null) {
+    this.tuiRef = tui;
+    if (!tui) {
+      this.frameBeforeOverlay = null;
+      this.overlayVisible = false;
+    }
     this.renderer.setTui(tui);
   }
 
@@ -67,9 +77,20 @@ export class Animator {
     this.holdNextState = state;
   }
 
-  /** Get current rendered frame for the widget. */
+  /** Get the current frame, hiding terminal images while a popup is visible. */
   getRenderedFrame(): RenderedFrame | null {
-    return this.renderer.getRenderedFrame();
+    const currentFrame = this.renderer.getRenderedFrame();
+    if (currentFrame) this.frameBeforeOverlay = null;
+    const frame = currentFrame ?? this.frameBeforeOverlay;
+    const overlayVisible = this.tuiRef?.hasOverlay() ?? false;
+    if (overlayVisible && !this.overlayVisible && frame?.kind === "image") {
+      // Image rows bypass popup composition; remove the existing terminal placement too.
+      this.frameBeforeOverlay = frame;
+      this.renderer.dispose();
+      this.renderer.resetCache();
+    }
+    this.overlayVisible = overlayVisible;
+    return overlayVisible ? null : frame;
   }
 
   resetRenderCache() {
@@ -77,6 +98,8 @@ export class Animator {
   }
 
   disposeRenderer() {
+    this.frameBeforeOverlay = null;
+    this.overlayVisible = false;
     this.renderer.dispose();
   }
 

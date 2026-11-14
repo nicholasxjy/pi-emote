@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { stripVTControlCharacters } from "node:util";
 import { FooterComponent, initTheme } from "@earendil-works/pi-coding-agent";
-import { Container, CURSOR_MARKER, visibleWidth, type TuiMouseEvent } from "@earendil-works/pi-tui";
+import { Container, CURSOR_MARKER, compositeTuiLine, visibleWidth, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import { SideEditor, findNativeFooter } from "../src/side-editor.ts";
 import { createWidgetFactory } from "../src/widget.ts";
+import { Animator } from "../src/animator.ts";
 import type { Config } from "../src/types.ts";
 import type { RenderedFrame } from "../src/renderer.ts";
 
@@ -57,20 +58,26 @@ function setup(initialFrame: RenderedFrame | null = { kind: "text", lines: ["(^_
   });
   const footerContainer = new Container();
   footerContainer.addChild(footer);
+  const renderer = {
+    setTui() {},
+    getRenderedFrame: () => frame,
+    dispose() { frame = null; },
+    resetCache() {},
+  };
   const deps = {
     config,
-    animator: { setTui() {}, getRenderedFrame: () => frame } as any,
+    animator: new Animator(config, renderer as any),
     pi: { getThinkingLevel: () => "high" },
     getCurrentEmoteSet: () => "ascii",
     getCtxRef: () => session,
     getTheme: () => theme,
     footer,
   };
-  const tui = { terminal: { rows: 30 }, requestRender() {}, children: [footerContainer] } as any;
+  const tui = { terminal: { rows: 30 }, requestRender() {}, hasOverlay: () => false, children: [footerContainer] } as any;
   const keybindings = { matches: (data: string, action: string) => data === "\x1b" && action === "app.interrupt" } as any;
   const editor = new SideEditor(tui, editorTheme, keybindings, deps);
   editor.focused = true;
-  return { editor, deps, tui, footer, session, statuses, setFrame: (next: RenderedFrame | null) => { frame = next; } };
+  return { editor, deps, tui, footer, session, statuses, renderer, setFrame: (next: RenderedFrame | null) => { frame = next; } };
 }
 
 function click(x: number, y: number): TuiMouseEvent {
@@ -211,6 +218,66 @@ test("all avatar protocols retain right-column rows taller than the avatar", () 
     assert.equal(lines.length, content.length + 5, frame.kind);
     content.forEach((line, i) => assert.ok(lines[i + 1].includes(line), `${frame.kind}: ${line}`));
   }
+});
+
+test("popup content remains visible over an image avatar", () => {
+  const frame: RenderedFrame = {
+    kind: "image", rows: 4, cursorAdvances: false,
+    sequence: "\x1b_Ga=T,f=100;AA==\x1b\\",
+  };
+  const { editor, tui } = setup(frame);
+  tui.hasOverlay = () => true;
+  const lines = editor.render(80);
+  const composed = compositeTuiLine(lines[1], "Context popup contents", 0, 80, 80);
+  assert.ok(composed.includes("Context popup contents"), "avatar must not block the popup compositor");
+});
+
+test("image avatars clear once for a popup and restore without an animation tick", (t) => {
+  const frame: RenderedFrame = { kind: "image", rows: 4, cursorAdvances: false, sequence: "AVATAR" };
+  const { editor, tui, renderer } = setup(frame);
+  const dispose = t.mock.method(renderer, "dispose");
+  const reset = t.mock.method(renderer, "resetCache");
+  assert.ok(editor.render(80).some((line) => line.includes("AVATAR")));
+
+  tui.hasOverlay = () => true;
+  for (let i = 0; i < 3; i++) {
+    assert.ok(editor.render(80).every((line) => !line.includes("AVATAR")));
+  }
+  assert.equal(dispose.mock.callCount(), 1);
+  assert.equal(reset.mock.callCount(), 1);
+
+  tui.hasOverlay = () => false;
+  for (let i = 0; i < 2; i++) {
+    assert.ok(editor.render(80).some((line) => line.includes("AVATAR")));
+  }
+  tui.hasOverlay = () => true;
+  editor.render(80);
+  assert.equal(dispose.mock.callCount(), 2);
+});
+
+test("animation updates stay hidden until the popup closes", () => {
+  const frame: RenderedFrame = { kind: "image", rows: 4, cursorAdvances: true, sequence: "OLD_AVATAR" };
+  const { editor, tui, setFrame } = setup(frame);
+  editor.render(80);
+  tui.hasOverlay = () => true;
+  editor.render(80);
+  setFrame({ ...frame, sequence: "NEW_AVATAR" });
+  assert.ok(editor.render(80).every((line) => !line.includes("NEW_AVATAR")));
+  tui.hasOverlay = () => false;
+  const restored = editor.render(80).join("\n");
+  assert.ok(restored.includes("NEW_AVATAR"));
+  assert.ok(!restored.includes("OLD_AVATAR"));
+});
+
+test("default widget also hides for popups and returns after they close", () => {
+  const { deps, tui } = setup();
+  deps.config.layout = "default";
+  const widget = createWidgetFactory(deps)(tui, theme);
+  assert.ok(widget.render(80).some((line) => line.includes("(^_^)")));
+  tui.hasOverlay = () => true;
+  assert.deepEqual(widget.render(80), []);
+  tui.hasOverlay = () => false;
+  assert.ok(widget.render(80).some((line) => line.includes("(^_^)")));
 });
 
 test("default widget retains its top border and model panel", () => {

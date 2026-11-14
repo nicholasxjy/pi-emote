@@ -84,6 +84,8 @@ Side layout hides pi-emote's model/usage panel and places Pi's editor and native
 
 The status bar is rendered by Pi's existing footer component, preserving its model, subscription, context, and extension status information. Other extensions that replace the editor or footer can override this layout.
 
+In both layouts, popup overlays temporarily hide the avatar so image rendering cannot cover the popup. The avatar returns when the popup closes.
+
 ### Theme
 
 Customize the widget colors. All fields are optional — omitted fields use the defaults below:
