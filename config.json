@@ -1,6 +1,7 @@
 {
   "enabled": true,
   "debug": false,
+  "layout": "default",
   "size": 8,
   "readingSpeed": 4,
   "hideBelow": 40,

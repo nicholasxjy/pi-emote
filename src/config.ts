@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Config, EmoteMapping, TerminalMapping } from "./types.js";
-import { DEFAULT_WIDGET_THEME, sanitizeWidgetTheme } from "./theme.js";
+import { DEFAULT_WIDGET_THEME, sanitizeWidgetTheme } from "./theme.ts";
 
 export interface ConfigResult {
   config: Config;
@@ -39,6 +39,7 @@ function loadJsonFile(path: string): any | null {
 const DEFAULTS: Config = {
   enabled: true,
   debug: false,
+  layout: "default",
   size: 8,
   readingSpeed: 4,
   hideBelow: 40,
@@ -119,6 +120,11 @@ export function loadLayeredConfig(extDir: string, cwd: string): ConfigResult {
     userConfig?.terminals,
     projectConfig?.terminals,
   );
+
+  if (merged.layout !== "default" && merged.layout !== "side") {
+    console.error(`[pi-emote] Invalid layout "${merged.layout}", using "default".`);
+    merged.layout = DEFAULTS.layout;
+  }
 
   // "theme" — deep-merged above, then validated: warn + fall back to defaults
   merged.theme = sanitizeWidgetTheme(merged.theme);

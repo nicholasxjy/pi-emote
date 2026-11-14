@@ -35,6 +35,7 @@ export interface WidgetTheme {
 export interface Config {
   enabled: boolean;
   debug: boolean;
+  layout: "default" | "side";
   size: number;
   readingSpeed: number;
   hideBelow: number;

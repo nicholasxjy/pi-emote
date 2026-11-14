@@ -2,8 +2,8 @@ import { visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
 import type { Config, WidgetColor } from "./types.js";
 import type { Animator } from "./animator.js";
 import type { RenderedFrame } from "./renderer.js";
-import { log } from "./log.js";
-import { resolveProgressColor } from "./theme.js";
+import { log } from "./log.ts";
+import { resolveProgressColor } from "./theme.ts";
 
 // --- Token formatting ---
 
@@ -56,12 +56,12 @@ function buildProgressBar(usage: any, latestCacheRead: number, latestInput: numb
 // --- Info panel ---
 
 /** Resolve a widget color to a text styler. "thinking-level-color" follows the current thinking level. */
-function colorStyler(color: WidgetColor, thinking: (s: string) => string, theme: any): (s: string) => string {
+export function colorStyler(color: WidgetColor, thinking: (s: string) => string, theme: any): (s: string) => string {
   if (color === "thinking-level-color") return thinking;
   return (s: string) => theme.fg(color, s);
 }
 
-function buildInfoLines(width: number, avatarWidth: number, ctxRef: any, pi: any, theme: any, config: any): string[] {
+export function buildInfoLines(infoWidth: number, ctxRef: any, pi: any, theme: any, config: Config): string[] {
   const lines: string[] = [];
   if (!ctxRef) return lines;
 
@@ -127,8 +127,6 @@ function buildInfoLines(width: number, avatarWidth: number, ctxRef: any, pi: any
     pwd = `~${pwd.slice(home.length)}`;
   }
   lines.push(pwd);
-
-  const infoWidth = width - avatarWidth - 5;
 
   const thinkingStyler = theme.getThinkingBorderColor?.(thinkingLevel)
     ?? ((s: string) => theme.fg("border", s));
@@ -203,7 +201,7 @@ function renderITermFrame(frame: RenderedFrame & { kind: "image" }, width: numbe
   return lines;
 }
 
-const TEXT_CANVAS_COLS = 8;
+export const TEXT_CANVAS_COLS = 8;
 const TEXT_CANVAS_ROWS = 4;
 
 function renderTextFrame(frame: RenderedFrame & { kind: "text" }, width: number, _config: Config, infoLines: string[], separatorColor: (s: string) => string): string[] {
@@ -252,6 +250,18 @@ function renderPlaceholderFrame(frame: RenderedFrame & { kind: "placeholder" }, 
   return lines;
 }
 
+export function renderFrame(frame: RenderedFrame, width: number, config: Config, contentLines: string[], separatorColor: (s: string) => string): string[] {
+  if (frame.kind === "image") {
+    return frame.cursorAdvances
+      ? renderITermFrame(frame, width, config, contentLines, separatorColor)
+      : renderKittyFrame(frame, width, config, contentLines, separatorColor);
+  }
+  if (frame.kind === "placeholder") {
+    return renderPlaceholderFrame(frame, width, config, contentLines, separatorColor);
+  }
+  return renderTextFrame(frame, width, config, contentLines, separatorColor);
+}
+
 // --- Widget factory ---
 
 export interface WidgetDeps {
@@ -286,22 +296,12 @@ export function createWidgetFactory(deps: WidgetDeps) {
         const separatorColor = colorStyler(config.theme["vertical-separator"] ?? "thinking-level-color", thinkingStyler, theme);
         const border = borderColor("─".repeat(width));
         const avatarWidth = frame.kind === "text" ? TEXT_CANVAS_COLS : config.size;
-        const infoLines = buildInfoLines(width, avatarWidth, deps.getCtxRef(), deps.pi, theme, config);
+        const infoLines = buildInfoLines(width - avatarWidth - 5, deps.getCtxRef(), deps.pi, theme, config);
 
         const lines: string[] = [];
         lines.push(border);
 
-        if (frame.kind === "image") {
-          if (frame.cursorAdvances) {
-            lines.push(...renderITermFrame(frame, width, config, infoLines, separatorColor));
-          } else {
-            lines.push(...renderKittyFrame(frame, width, config, infoLines, separatorColor));
-          }
-        } else if (frame.kind === "placeholder") {
-          lines.push(...renderPlaceholderFrame(frame, width, config, infoLines, separatorColor));
-        } else {
-          lines.push(...renderTextFrame(frame, width, config, infoLines, separatorColor));
-        }
+        lines.push(...renderFrame(frame, width, config, infoLines, separatorColor));
 
         return lines;
       },

@@ -70,6 +70,20 @@ Only include what you want to change:
 
 See `config.json` in the extension root for all defaults.
 
+### Layout
+
+`layout` defaults to `"default"`, which shows the avatar and model/usage panel above the editor. Set it to `"side"` to put the input editor and status bar to the right of the avatar instead:
+
+```json
+{
+  "layout": "side"
+}
+```
+
+Side layout replaces the model/usage panel and removes the horizontal borders above and below the input. The editor keeps its shortcuts, history, and autocomplete. Below `hideBelow`, the avatar is hidden and the editor uses the full width.
+
+This layout supplies its own editor and status bar, showing the directory, git branch, session name, token usage, context percentage, model, and extension statuses. Other extensions that replace the editor or footer can override it.
+
 ### Theme
 
 Customize the widget colors. All fields are optional — omitted fields use the defaults below:
