@@ -2,8 +2,6 @@ import { CustomEditor, FooterComponent, type KeybindingsManager } from "@earendi
 import { Container, type Component, type EditorTheme, type TUI, type TuiMouseEvent, type TuiMouseEventResult } from "@earendil-works/pi-tui";
 import { colorStyler, renderFrame, TEXT_CANVAS_COLS, type WidgetDeps } from "./widget.ts";
 
-const HIDDEN_BORDER = "\x00pi-emote-border";
-
 export function findNativeFooter(tui: TUI): FooterComponent | undefined {
   // shortcut: Pi has no footer getter; use its component tree until one is exposed.
   const components = [...tui.children];
@@ -23,16 +21,12 @@ export class SideEditor extends CustomEditor {
   private deps: SideEditorDeps;
   private gutter = 0;
   private editorWidth = 0;
-  private editorRows: number[] = [];
+  private editorHeight = 0;
 
   constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, deps: SideEditorDeps) {
     super(tui, theme, keybindings, { embedWorkingStatus: true });
     this.deps = deps;
     deps.animator.setTui(tui);
-  }
-
-  protected renderBottomBorder(): string {
-    return HIDDEN_BORDER;
   }
 
   render(width: number): string[] {
@@ -42,13 +36,8 @@ export class SideEditor extends CustomEditor {
     this.gutter = frame && width >= config.hideBelow && width > avatarWidth + 5 ? avatarWidth + 4 : 0;
     this.editorWidth = Math.max(1, width - this.gutter);
 
-    // Remove only the bottom border; autocomplete is rendered after it.
-    this.editorRows = [];
-    const editorLines = super.render(this.editorWidth).filter((line, row) => {
-      if (line === HIDDEN_BORDER) return false;
-      this.editorRows.push(row);
-      return true;
-    });
+    const editorLines = super.render(this.editorWidth);
+    this.editorHeight = editorLines.length;
     const [topBorder, ...content] = editorLines;
     content.push(...(this.deps.footer?.render(this.editorWidth) ?? []));
     if (!this.gutter || !frame) return [topBorder, ...content];
@@ -65,8 +54,7 @@ export class SideEditor extends CustomEditor {
   }
 
   handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
-    const row = this.editorRows[event.y];
-    if (event.x < this.gutter || row === undefined) return undefined;
-    return super.handleMouse({ ...event, x: event.x - this.gutter, y: row, width: this.editorWidth });
+    if (event.x < this.gutter || event.y >= this.editorHeight) return undefined;
+    return super.handleMouse({ ...event, x: event.x - this.gutter, width: this.editorWidth });
   }
 }

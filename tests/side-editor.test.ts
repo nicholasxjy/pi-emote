@@ -82,12 +82,13 @@ test("side layout keeps a full-width top border and uses Pi's native footer", ()
   deps.getCtxRef = () => { throw new Error("side layout must not build emote status information"); };
   editor.setText("你好");
   const lines = editor.render(80);
-  assert.equal(lines.length, 5);
+  assert.equal(lines.length, 6);
   assert.equal(lines[0], "─".repeat(80));
   assert.ok(lines[1].startsWith("          │ 你好"));
   assert.equal(visibleWidth(lines[1].split(CURSOR_MARKER)[0]), 16);
-  assert.deepEqual(lines.slice(2).map((line) => line.slice(12)), footer.render(68));
-  assert.ok(lines.slice(1).every((line) => !line.includes("─") && visibleWidth(line) <= 80));
+  assert.equal(lines[2].slice(12), "─".repeat(68));
+  assert.deepEqual(lines.slice(3).map((line) => line.slice(12)), footer.render(68));
+  assert.ok(lines.every((line) => visibleWidth(line) <= 80));
   assert.ok(!lines.join("\n").includes("Test model"));
 
   let submitted = "";
@@ -105,7 +106,7 @@ test("native footer details and updates pass through without emote formatting", 
   session.routedModel = { model: { id: "routed-model" }, thinkingLevel: "low" };
   footer.setAutoCompactEnabled(false);
   statuses.set("aaa", "First\nstatus");
-  const lines = editor.render(160).slice(2).map((line) => line.slice(12));
+  const lines = editor.render(160).slice(3).map((line) => line.slice(12));
   assert.deepEqual(lines, footer.render(148));
   const text = lines.map(stripVTControlCharacters).join("\n");
   assert.ok(text.includes("(sub)"));
@@ -136,7 +137,8 @@ test("narrow terminals and missing frames keep the full-width editor and native 
   assert.equal(narrow[0], "─".repeat(30));
   assert.ok(narrow[1].startsWith("message"));
   assert.equal(visibleWidth(narrow[1]), 30);
-  assert.deepEqual(narrow.slice(2), footer.render(30));
+  assert.equal(narrow[2], "─".repeat(30));
+  assert.deepEqual(narrow.slice(3), footer.render(30));
   assert.ok(narrow.every((line) => !line.includes("│") && visibleWidth(line) <= 30));
   setFrame(null);
   assert.equal(visibleWidth(editor.render(80)[1]), 80);
@@ -151,9 +153,10 @@ test("mouse clicks use editor coordinates after adding the avatar", () => {
   editor.handleMouse(click(13, 2));
   assert.deepEqual(editor.getCursor(), { line: 1, col: 1 });
   assert.equal(editor.handleMouse(click(1, 1)), undefined);
+  assert.equal(editor.handleMouse(click(14, 4)), undefined);
 });
 
-test("bottom border removal retains every autocomplete row and clicking a completion still works", async () => {
+test("native borders retain every autocomplete row and clicking a completion still works", async () => {
   const { editor } = setup();
   editor.setAutocompleteProvider({
     getSuggestions: () => ({ prefix: "/", items: ["/first", "/second", "/third"].map((value) => ({ value, label: value })) }),
@@ -165,7 +168,8 @@ test("bottom border removal retains every autocomplete row and clicking a comple
   assert.equal(editor.isShowingAutocomplete(), true);
   const lines = editor.render(80);
   for (const label of ["/first", "/second", "/third"]) assert.ok(lines.some((line) => line.includes(label)));
-  editor.handleMouse(click(15, 4));
+  assert.equal(lines[2].slice(12), "─".repeat(68));
+  editor.handleMouse(click(15, 5));
   assert.equal(editor.getText(), "/third");
 });
 
@@ -181,7 +185,7 @@ test("all avatar protocols retain right-column rows taller than the avatar", () 
     const { editor } = setup(frame);
     editor.setText(content.join("\n"));
     const lines = editor.render(80);
-    assert.equal(lines.length, content.length + 4, frame.kind);
+    assert.equal(lines.length, content.length + 5, frame.kind);
     content.forEach((line, i) => assert.ok(lines[i + 1].includes(line), `${frame.kind}: ${line}`));
   }
 });
