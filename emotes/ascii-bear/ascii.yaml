@@ -34,3 +34,61 @@ success: "ʕᵕ͓͡ᵕʔ★"
 failure: "ʕಥ̫͡ಥʔ"
 
 compact: "ʕᵒ̫͡ᵒʔ..."
+
+# Generated activity scenes (scripts/generate-activity-frames.mjs).
+
+ask:
+  - "ʕ•ᴥ•ʔ?"
+  - "ʕᵔᴥᵔʔ??"
+
+grandma:
+  - "ʕ-ᴥ-ʔzZ"
+  - "ʕ-ᴥ-ʔZz"
+
+bye:
+  - "ʕ•ᴥ•ʔ/"
+  - "ʕᵔᴥᵔʔ\\"
+
+delegate:
+  - "ʕ•ᴥ•ʔo-o"
+  - "ʕᵔᴥᵔʔo=o"
+
+jobs:
+  - "ʕ•ᴥ•ʔ[=]"
+  - "ʕᵔᴥᵔʔ[≡]"
+
+remember:
+  - "ʕ•ᴥ•ʔ[+]"
+  - "ʕᵔᴥᵔʔ[*]"
+
+yolo:
+  - "ʕ•ᴥ•ʔB)"
+  - "ʕᵔᴥᵔʔB)!"
+
+super-yolo:
+  - "ʕ•ᴥ•ʔ!!"
+  - "ʕᵔᴥᵔʔ!!!"
+
+explore:
+  - "ʕ•ᴥ•ʔo?"
+  - "ʕᵔᴥᵔʔO?"
+
+build:
+  - "ʕ•ᴥ•ʔ/T"
+  - "ʕᵔᴥᵔʔT\\"
+
+verify:
+  - "ʕ•ᴥ•ʔ[v]"
+  - "ʕᵔᴥᵔʔ[V]"
+
+judge:
+  - "ʕ•ᴥ•ʔ=T"
+  - "ʕᵔᴥᵔʔT="
+
+review:
+  - "ʕ•ᴥ•ʔ[/]"
+  - "ʕᵔᴥᵔʔ[x]"
+
+jira:
+  - "ʕ•ᴥ•ʔ^"
+  - "ʕᵔᴥᵔʔ^^"

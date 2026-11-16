@@ -1,4 +1,11 @@
-export type EmoteState = "hi" | "idle" | "think" | "talk" | "read" | "write" | "tool" | "success" | "failure" | "compact";
+export const EMOTE_STATES = [
+  "hi", "idle", "think", "talk", "read", "write", "tool",
+  "success", "failure", "compact", "ask", "grandma", "bye",
+  "delegate", "jobs", "remember", "yolo", "super-yolo",
+  "explore", "build", "verify", "judge", "review", "jira",
+] as const;
+
+export type EmoteState = (typeof EMOTE_STATES)[number];
 
 export type ThemeColor =
   | "accent" | "border" | "borderAccent" | "borderMuted"
@@ -39,7 +46,8 @@ export interface Config {
   size: number;
   readingSpeed: number;
   hideBelow: number;
-  holdDuration: { hi: number; success: number; failure: number };
+  holdDuration: { hi: number; success: number; failure: number; bye: number };
+  grandmaAfterMs: number;
   blinkInterval: [number, number];
   talkTickMs: number;
   cycleMs: number;

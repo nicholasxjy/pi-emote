@@ -3,7 +3,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, readdirSync } from "node:fs";
 
+import { EMOTE_STATES } from "./types.ts";
 import type { EmoteState, ResolvedRenderer } from "./types.js";
+import { toolNameToState, isFarewell } from "./activity.ts";
 import type { Renderer } from "./renderer.js";
 import { log, setDebug } from "./log.js";
 import { loadLayeredConfig } from "./config.js";
@@ -19,11 +21,9 @@ import { createWidgetFactory } from "./widget.js";
 import { SideEditor, findNativeFooter } from "./side-editor.js";
 import { resolveRenderer } from "./terminal.js";
 
-const IMAGE_STATES = ["hi", "idle", "think", "talk", "read", "write", "tool", "success", "failure", "compact"];
-
 /** Check if a set directory contains any image frames (PNG files in state subdirs). */
 function hasImageFrames(setDir: string): boolean {
-  for (const state of IMAGE_STATES) {
+  for (const state of EMOTE_STATES) {
     const stateDir = join(setDir, state);
     if (existsSync(stateDir)) {
       const files = readdirSync(stateDir).filter((f) => f.endsWith(".png"));
@@ -31,15 +31,6 @@ function hasImageFrames(setDir: string): boolean {
     }
   }
   return false;
-}
-
-function toolNameToState(toolName: string): EmoteState {
-  switch (toolName) {
-    case "read": return "read";
-    case "write":
-    case "edit": return "write";
-    default: return "tool";
-  }
 }
 
 function createRendererFromResolved(resolved: ResolvedRenderer, size: number): Renderer {
@@ -87,6 +78,60 @@ export default function (pi: ExtensionAPI) {
   let renderer = createRendererFromResolved(lastResolved, config.size);
 
   const animator = new Animator(config, renderer);
+  const activeTools = new Map<string, EmoteState>();
+  let runUsedTools = false;
+  let runHadError = false;
+  let farewell = false;
+  let stopTerminalInput: (() => void) | null = null;
+  let greetTimer: ReturnType<typeof setTimeout> | null = null;
+  let previewTimer: ReturnType<typeof setTimeout> | null = null;
+  let demoTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function clearPreview() {
+    if (greetTimer) { clearTimeout(greetTimer); greetTimer = null; }
+    if (previewTimer) { clearTimeout(previewTimer); previewTimer = null; }
+    if (demoTimer) { clearTimeout(demoTimer); demoTimer = null; }
+  }
+
+  function previewState(state: EmoteState) {
+    animator.setAfterTalkState("idle");
+    animator.transitionTo(state);
+    if (state === "talk") animator.onTalkToken("Preview the avatar talking for a few seconds.");
+    if (state !== "idle") {
+      previewTimer = setTimeout(() => {
+        previewTimer = null;
+        animator.transitionTo("idle");
+      }, 6000);
+    }
+  }
+
+  function playDemo(index = 0) {
+    const state = EMOTE_STATES[index];
+    if (!state) { animator.transitionTo("idle"); return; }
+    previewState(state);
+    demoTimer = setTimeout(() => {
+      clearPreview();
+      playDemo(index + 1);
+    }, 2500);
+  }
+
+  pi.registerCommand("emote", {
+    description: "Preview an avatar state: /emote <state> | demo",
+    getArgumentCompletions: (prefix) => [...EMOTE_STATES, "demo"]
+      .filter((name) => name.startsWith(prefix.trim()))
+      .map((name) => ({ value: name, label: name })),
+    handler: async (args, ctx) => {
+      if (!widgetActive) return;
+      const name = args.trim();
+      if (name === "demo" || EMOTE_STATES.includes(name as EmoteState)) {
+        clearPreview();
+        if (name === "demo") playDemo();
+        else previewState(name as EmoteState);
+      } else {
+        ctx.ui.notify(`[pi-emote] /emote <state>: ${[...EMOTE_STATES, "demo"].join(", ")}`, "info");
+      }
+    },
+  });
 
   function loadEmoteSet(setName: string) {
     currentEmoteSet = setName;
@@ -136,7 +181,11 @@ export default function (pi: ExtensionAPI) {
     log(`session_start: hasUI=${ctx.hasUI}`);
     if (!ctx.hasUI) return;
 
+    clearPreview();
+    stopTerminalInput?.();
     animator.clearAllTimers();
+    activeTools.clear();
+    farewell = false;
     cwd = ctx.cwd;
     ({ config, userConfiguredTerminals } = loadLayeredConfig(extDir, cwd));
     setDebug(config.debug);
@@ -188,10 +237,18 @@ export default function (pi: ExtensionAPI) {
     }
 
     widgetActive = true;
-    setTimeout(() => animator.transitionTo("hi"), 500);
+    stopTerminalInput = ctx.ui.onTerminalInput(() => { animator.touch(); });
+    greetTimer = setTimeout(() => {
+      greetTimer = null;
+      animator.transitionTo("hi");
+    }, 500);
   });
 
   pi.on("session_shutdown", async (_event, ctx) => {
+    clearPreview();
+    stopTerminalInput?.();
+    stopTerminalInput = null;
+    activeTools.clear();
     animator.clearAllTimers();
     animator.disposeRenderer();
     if (widgetActive && ctx.hasUI) {
@@ -225,12 +282,40 @@ export default function (pi: ExtensionAPI) {
     switchEmoteSet(modelId, event.level);
   });
 
+  pi.on("input", async (event) => {
+    if (!widgetActive) return;
+    clearPreview();
+    farewell = isFarewell(event.text);
+    animator.touch();
+  });
+
+  pi.on("agent_start", async () => {
+    if (!widgetActive) return;
+    clearPreview();
+    runUsedTools = false;
+    runHadError = false;
+    activeTools.clear();
+    animator.setAfterTalkState("idle");
+    animator.transitionTo("think");
+  });
+
+  pi.on("ui_prompt_start", async () => {
+    if (!widgetActive) return;
+    clearPreview();
+    animator.beginPrompt();
+  });
+
+  pi.on("ui_prompt_end", async () => {
+    if (widgetActive) animator.endPrompt();
+  });
+
   pi.on("message_update", async (event) => {
     if (!widgetActive) return;
     if (event.message?.role !== "assistant") return;
 
     const streamEvent = event.assistantMessageEvent;
     if (!streamEvent) return;
+    clearPreview();
 
     if (streamEvent.type === "thinking_start" || streamEvent.type === "thinking_delta") {
       if (animator.currentState !== "think") {
@@ -243,7 +328,7 @@ export default function (pi: ExtensionAPI) {
       const partial = streamEvent.partial;
       const block = partial?.content?.[streamEvent.contentIndex];
       if (block && "name" in block && block.name) {
-        animator.transitionTo(toolNameToState(block.name));
+        animator.transitionTo(toolNameToState(block.name, block.arguments));
       } else {
         animator.transitionTo("tool");
       }
@@ -260,37 +345,54 @@ export default function (pi: ExtensionAPI) {
     animator.onTalkToken(text);
   });
 
-  pi.on("agent_end", async () => {
+  pi.on("agent_end", async (event) => {
     if (!widgetActive) return;
+    const lastAssistant = event.messages.findLast((message) => message.role === "assistant");
+    const finale: EmoteState = lastAssistant?.stopReason === "aborted" ? "idle"
+      : lastAssistant?.stopReason === "error" ? "failure"
+      : farewell ? "bye" : runUsedTools && !runHadError ? "success" : "idle";
+    farewell = false;
+    activeTools.clear();
     if (animator.currentState === "talk") {
+      animator.setAfterTalkState(finale);
       animator.endTalk();
-    } else if (animator.currentState !== "idle" && animator.currentState !== "hi" && animator.currentState !== "compact") {
-      animator.transitionTo("idle");
+    } else if (!["hi", "compact", "failure"].includes(animator.currentState)) {
+      animator.transitionTo(finale);
     }
   });
 
   pi.on("tool_execution_start", async (event) => {
     if (!widgetActive) return;
-    animator.transitionTo(toolNameToState(event.toolName));
+    clearPreview();
+    runUsedTools = true;
+    const state = toolNameToState(event.toolName, event.args);
+    activeTools.set(event.toolCallId, state);
+    animator.transitionTo(state);
   });
 
   pi.on("tool_execution_end", async (event) => {
     if (!widgetActive) return;
-    if (event.toolName === "bash" && event.isError) {
-      animator.setHoldNextState("read");
+    clearPreview();
+    activeTools.delete(event.toolCallId);
+    const nextState = [...activeTools.values()].at(-1) ?? "read";
+    if (event.isError) {
+      runHadError = true;
+      animator.setHoldNextState(nextState);
       animator.transitionTo("failure");
     } else {
-      animator.transitionTo("read");
+      animator.transitionTo(nextState);
     }
   });
 
   pi.on("session_before_compact", async () => {
     if (!widgetActive) return;
+    clearPreview();
     animator.transitionTo("compact");
   });
 
   pi.on("session_compact", async () => {
     if (!widgetActive) return;
+    clearPreview();
     animator.transitionTo("idle");
   });
 }

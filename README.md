@@ -43,12 +43,48 @@ pi install git:github.com/cgxeiji/pi-emote
 | idle | Nothing happening (blinks occasionally) |
 | think | Reasoning tokens streaming |
 | talk | Text response streaming |
-| read | `read` tool / reading tool output |
+| read | File/search tools (`read`, `grep`, `find`, `ls`, etc.) / reading tool output |
 | write | `write` or `edit` tool |
 | tool | Any other tool |
-| success | Successful tool execution |
+| success | Agent finishes a run that used tools without tool errors |
 | failure | Failed tool execution |
 | compact | Context compaction |
+| ask | Question tools or an active UI prompt (confirm/select/input) |
+| grandma | Idle for 30 seconds; any key wakes the avatar |
+| bye | A standalone goodbye prompt (`bye`, `goodbye`, `再见`, etc.) or `mem_session_summary` |
+| delegate | Subagent tools without a recognized role, or mixed-role batches |
+| explore | Explorer subagents, web search, or code graph exploration |
+| build | Worker, fix, apply, or build subagents |
+| verify | Verify or validator subagents |
+| judge | Judge or refuter subagents |
+| review | Review subagents |
+| jira | Jira subagents |
+| jobs | Background job tools (`bg_run`, `bg_status`, `bash_background`, etc.) |
+| remember | Memory save (`mem_save`) |
+| yolo | Preview via `/emote yolo` |
+| super-yolo | Preview via `/emote super-yolo` |
+
+The expanded scenes follow [gentle-emote](https://github.com/efolchmontiel/gentle-emote). Subagent scenes use the `agent` argument, including homogeneous `tasks` and `chain` batches. MCP tool names are recognized too. Tool-specific scenes need the corresponding extension installed. YOLO modes can be previewed; automatic mode detection requires Gentle Shell's private host adapter and is not wired into Pi.
+
+All built-in image and ASCII sets include every state. New image scenes retain each avatar's original character and add animated activity badges.
+
+### Preview
+
+- `/emote` lists the available states.
+- `/emote <state>` previews one, with tab completion.
+- `/emote demo` cycles through all 24 states.
+- `/emote idle` stops a preview. New agent activity also cancels previews.
+
+Set `grandmaAfterMs` to change the idle delay, or `0` to disable it. Set `holdDuration.bye` to change the goodbye duration:
+
+```json
+{
+  "grandmaAfterMs": 60000,
+  "holdDuration": { "bye": 3000 }
+}
+```
+
+To rebuild the bundled activity frames, install [ImageMagick](https://imagemagick.org/) and run `npm run sprites`. ImageMagick is only needed to regenerate assets; using the extension needs no additional dependency.
 
 ## Config
 
@@ -213,10 +249,10 @@ emotes/my-avatar/
 ├── read/*.png
 ├── write/*.png
 ├── tool/*.png
-└── ...          # hi, success, failure, compact
+└── ...          # one directory per state listed above
 ```
 
-Not all states are required. Missing ones just won't animate.
+Not all states are required for custom sets. Missing ones just won't animate. All built-in image and ASCII sets cover every state.
 
 ### Where to put them
 

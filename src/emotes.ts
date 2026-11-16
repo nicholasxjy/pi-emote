@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { EMOTE_STATES } from "./types.ts";
 import type { EmoteState, EmoteMapping, EmotesConfig, FrameSet } from "./types.js";
 
 // --- Glob Matching ---
@@ -72,9 +73,7 @@ export function loadEmotesConfig(emoteSetDir: string): EmotesConfig {
 
 export function discoverFrames(emoteSetDir: string): Map<EmoteState, FrameSet> {
   const frameMap = new Map<EmoteState, FrameSet>();
-  const states: EmoteState[] = ["hi", "idle", "think", "talk", "read", "write", "tool", "success", "failure", "compact"];
-
-  for (const state of states) {
+  for (const state of EMOTE_STATES) {
     const stateDir = join(emoteSetDir, state);
     if (!existsSync(stateDir)) continue;
 

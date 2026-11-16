@@ -8,8 +8,10 @@
   "holdDuration": {
     "hi": 2000,
     "success": 1200,
-    "failure": 1200
+    "failure": 1200,
+    "bye": 2000
   },
+  "grandmaAfterMs": 30000,
   "blinkInterval": [3000, 6000],
   "talkTickMs": 120,
   "cycleMs": 500,

@@ -36,3 +36,65 @@ failure: "( ° Д°)#"
 
 
 compact: "(-᷅_ -᷄;)"
+
+# Generated activity scenes (scripts/generate-activity-frames.mjs).
+
+success:
+  - "(•‿•)OK!"
+  - "(^‿^)*v*"
+
+ask:
+  - "(•‿•)?"
+  - "(^‿^)??"
+
+grandma:
+  - "(-_-)zZ"
+  - "(-_-)Zz"
+
+bye:
+  - "(•‿•)/"
+  - "(^‿^)\\"
+
+delegate:
+  - "(•‿•)o-o"
+  - "(^‿^)o=o"
+
+jobs:
+  - "(•‿•)[=]"
+  - "(^‿^)[≡]"
+
+remember:
+  - "(•‿•)[+]"
+  - "(^‿^)[*]"
+
+yolo:
+  - "(•‿•)B)"
+  - "(^‿^)B)!"
+
+super-yolo:
+  - "(•‿•)!!"
+  - "(^‿^)!!!"
+
+explore:
+  - "(•‿•)o?"
+  - "(^‿^)O?"
+
+build:
+  - "(•‿•)/T"
+  - "(^‿^)T\\"
+
+verify:
+  - "(•‿•)[v]"
+  - "(^‿^)[V]"
+
+judge:
+  - "(•‿•)=T"
+  - "(^‿^)T="
+
+review:
+  - "(•‿•)[/]"
+  - "(^‿^)[x]"
+
+jira:
+  - "(•‿•)^"
+  - "(^‿^)^^"

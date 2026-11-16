@@ -3,7 +3,8 @@ import { join } from "node:path";
 import type { TUI } from "@earendil-works/pi-tui";
 import type { EmoteState, EmotesConfig } from "./types.js";
 import type { Renderer, RenderedFrame } from "./renderer.js";
-import { log } from "./log.js";
+import { log } from "./log.ts";
+import { EMOTE_STATES } from "./types.ts";
 
 // --- Minimal YAML parser for ascii.yaml ---
 // Handles: scalars, one-level maps, and arrays of scalars. No YAML library needed.
@@ -246,9 +247,7 @@ export class AsciiRenderer implements Renderer {
     const parsed = parseSimpleYaml(yamlText);
     this.frames.clear();
 
-    const states: EmoteState[] = ["hi", "idle", "think", "talk", "read", "write", "tool", "success", "failure", "compact"];
-
-    for (const state of states) {
+    for (const state of EMOTE_STATES) {
       const value = parsed[state];
       if (value === undefined) continue;
 

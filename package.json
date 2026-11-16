@@ -5,6 +5,7 @@
   "author": "CGx <31814150+cgxeiji@users.noreply.github.com>",
   "license": "MIT",
   "scripts": {
+    "sprites": "node scripts/generate-activity-frames.mjs",
     "test": "node --test \"tests/*.test.ts\""
   },
   "repository": {
@@ -22,6 +23,7 @@
   ],
   "files": [
     "src",
+    "scripts",
     "emotes",
     "!emotes/_test",
     "!emotes/_unused",

@@ -38,6 +38,10 @@ export class Animator {
 
   // Hold state
   private holdNextState: EmoteState = "idle";
+  private afterTalkState: EmoteState = "idle";
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  private promptDepth = 0;
+  private stateAfterPrompt: EmoteState = "idle";
 
   // Talk state
   private talkWordCount = 0;
@@ -77,6 +81,31 @@ export class Animator {
     this.holdNextState = state;
   }
 
+  setAfterTalkState(state: EmoteState) {
+    this.afterTalkState = state;
+  }
+
+  beginPrompt() {
+    if (this.promptDepth++ > 0) return;
+    this.stateAfterPrompt = this.currentState;
+    this.transitionTo("ask");
+  }
+
+  endPrompt() {
+    if (this.promptDepth === 0 || --this.promptDepth > 0) return;
+    this.transitionTo(this.stateAfterPrompt);
+  }
+
+  /** Keyboard activity postpones the idle scene and wakes a resting avatar. */
+  touch() {
+    if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
+    if (this.currentState === "grandma") {
+      this.transitionTo("idle");
+    } else if (this.currentState === "idle" && this.config.grandmaAfterMs > 0 && this.renderer.getCycleFrameCount("grandma") > 0) {
+      this.idleTimer = setTimeout(() => this.transitionTo("grandma"), this.config.grandmaAfterMs);
+    }
+  }
+
   /** Get the current frame, hiding terminal images while a popup is visible. */
   getRenderedFrame(): RenderedFrame | null {
     const currentFrame = this.renderer.getRenderedFrame();
@@ -106,6 +135,9 @@ export class Animator {
   // --- Timer management ---
 
   clearAllTimers() {
+    this.promptDepth = 0;
+    this.afterTalkState = "idle";
+    if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     if (this.holdTimer) { clearTimeout(this.holdTimer); this.holdTimer = null; }
     if (this.blinkTimer) { clearTimeout(this.blinkTimer); this.blinkTimer = null; }
     if (this.talkTimer) { clearInterval(this.talkTimer); this.talkTimer = null; }
@@ -116,6 +148,7 @@ export class Animator {
   }
 
   private clearStateTimers() {
+    if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     if (this.holdTimer) { clearTimeout(this.holdTimer); this.holdTimer = null; }
     if (this.talkTimer) { clearInterval(this.talkTimer); this.talkTimer = null; }
     if (this.cycleTimer) { clearInterval(this.cycleTimer); this.cycleTimer = null; }
@@ -127,6 +160,10 @@ export class Animator {
   // --- State transitions ---
 
   transitionTo(state: EmoteState) {
+    if (this.promptDepth > 0 && state !== "ask") {
+      this.stateAfterPrompt = state;
+      return;
+    }
     this.clearStateTimers();
     if (this.currentState === "idle" && this.blinkTimer) {
       clearTimeout(this.blinkTimer);
@@ -135,28 +172,22 @@ export class Animator {
     this.currentState = state;
 
     switch (state) {
-      case "hi": this.enterHi(); break;
+      case "hi": this.enterHold(state, this.config.holdDuration.hi); break;
       case "idle": this.enterIdle(); break;
       case "think": this.enterThink(); break;
       case "talk": this.enterTalk(); break;
-      case "read":
-      case "write":
-      case "tool": this.enterCycle(state); break;
       case "success": this.enterHold(state, this.config.holdDuration.success, this.holdNextState); this.holdNextState = "idle"; break;
       case "failure": this.enterHold(state, this.config.holdDuration.failure, this.holdNextState); this.holdNextState = "idle"; break;
-      case "compact": this.enterCompact(); break;
+      case "bye": this.enterHold(state, this.config.holdDuration.bye); break;
+      default: this.enterCycle(state); break;
     }
-  }
-
-  private enterHi() {
-    this.renderer.showRandomFrame("hi");
-    this.holdTimer = setTimeout(() => this.transitionTo("idle"), this.config.holdDuration.hi);
   }
 
   enterIdle() {
     const defaultFile = this.emotesConfig.idle?.default ?? "idle.png";
     this.renderer.showFrame("idle", defaultFile);
     this.scheduleBlink();
+    this.touch();
   }
 
   private scheduleBlink() {
@@ -278,10 +309,10 @@ export class Animator {
       if (this.currentState !== "talk") return;
       const timeSinceLastToken = Date.now() - this.lastTokenTime;
       if (timeSinceLastToken > 200) {
-        this.transitionTo("idle");
+        this.transitionTo(this.afterTalkState);
       } else {
         this.talkDurationTimer = setTimeout(() => {
-          if (this.currentState === "talk") this.transitionTo("idle");
+          if (this.currentState === "talk") this.transitionTo(this.afterTalkState);
         }, 200);
       }
     }, remaining);
@@ -292,7 +323,7 @@ export class Animator {
     const targetDurationMs = (this.talkWordCount / this.config.readingSpeed) * 1000;
     const elapsed = Date.now() - this.talkStartTime;
     if (elapsed >= targetDurationMs) {
-      this.transitionTo("idle");
+      this.transitionTo(this.afterTalkState);
     } else {
       // Streaming finished but reading time remains — keep mouth animating
       if (this.talkGapTimer) { clearTimeout(this.talkGapTimer); this.talkGapTimer = null; }
@@ -318,11 +349,7 @@ export class Animator {
   }
 
   private enterHold(state: EmoteState, duration: number, nextState: EmoteState = "idle") {
-    this.renderer.showRandomFrame(state);
+    this.enterCycle(state);
     this.holdTimer = setTimeout(() => this.transitionTo(nextState), duration);
-  }
-
-  private enterCompact() {
-    this.renderer.showRandomFrame("compact");
   }
 }
