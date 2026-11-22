@@ -116,9 +116,11 @@ See `config.json` in the extension root for all defaults.
 }
 ```
 
-Side layout hides pi-emote's model/usage panel and places Pi's editor and native status bar beside the avatar. A horizontal border spans the top, including Pi's working indicator; the input keeps its native bottom border above the status bar. The input starts with a `❯` prompt icon and keeps its shortcuts, history, and autocomplete. Below `hideBelow`, the avatar is hidden and the editor and status bar use the full width.
+Side layout hides pi-emote's model/usage panel and places Pi's editor and native status bar beside the avatar. A horizontal border spans the top, including Pi's working indicator, and the input keeps its native bottom border above the status bar. The native editor starts with a `❯` prompt icon and keeps its shortcuts, history, and autocomplete. Below `hideBelow`, the avatar is hidden and the editor and status bar use the full width.
 
-The status bar is rendered by Pi's existing footer component, preserving its model, subscription, context, and extension status information. Other extensions that replace the editor or footer can override this layout.
+Compatible custom editors, including Powerline Footer's Bash Mode editor, keep their own input and submission behavior in side layout. If Emote cannot attach to the editor, it uses its standalone widget above the editor until Pi mounts a compatible editor.
+
+Pi's native footer keeps its model, subscription, context, and extension status information beside the avatar. Custom footers stay in their own slot.
 
 In both layouts, popup overlays temporarily hide the avatar so image rendering cannot cover the popup. The avatar returns when the popup closes.
 

@@ -2,9 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { stripVTControlCharacters } from "node:util";
-import { FooterComponent, initTheme } from "@earendil-works/pi-coding-agent";
+import { CustomEditor, FooterComponent, initTheme } from "@earendil-works/pi-coding-agent";
 import { Container, CURSOR_MARKER, compositeTuiLine, visibleWidth, type TuiMouseEvent } from "@earendil-works/pi-tui";
-import { SideEditor, findNativeFooter } from "../src/side-editor.ts";
+import { attachSideEditor } from "../src/side-editor.ts";
 import { createWidgetFactory } from "../src/widget.ts";
 import { Animator } from "../src/animator.ts";
 import type { Config } from "../src/types.ts";
@@ -70,12 +70,12 @@ function setup(initialFrame: RenderedFrame | null = { kind: "text", lines: ["(^_
     pi: { getThinkingLevel: () => "high" },
     getCurrentEmoteSet: () => "ascii",
     getCtxRef: () => session,
-    getTheme: () => theme,
-    footer,
   };
   const tui = { terminal: { rows: 30 }, requestRender() {}, hasOverlay: () => false, children: [footerContainer] } as any;
   const keybindings = { matches: (data: string, action: string) => data === "\x1b" && action === "app.interrupt" } as any;
-  const editor = new SideEditor(tui, editorTheme, keybindings, deps);
+  const editor = new CustomEditor(tui, editorTheme, keybindings, { embedWorkingStatus: true });
+  deps.animator.setTui(tui);
+  assert.ok(attachSideEditor(editor, deps, () => theme, (width) => footer.render(width), true));
   editor.focused = true;
   return { editor, deps, tui, footer, session, statuses, renderer, setFrame: (next: RenderedFrame | null) => { frame = next; } };
 }
@@ -142,12 +142,6 @@ test("native footer details and updates pass through without emote formatting", 
   assert.ok(text.includes("5.0%/2.0k"));
   assert.ok(!text.includes("(auto)"));
   assert.equal(lines[2], "First status Extension ready");
-});
-
-test("native footer is located in Pi's nested component containers", () => {
-  const { tui, footer } = setup();
-  assert.equal(findNativeFooter(tui), footer);
-  assert.equal(findNativeFooter({ ...tui, children: [] }), undefined);
 });
 
 test("top border preserves Pi's native working indicator", () => {

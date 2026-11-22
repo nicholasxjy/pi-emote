@@ -1,4 +1,4 @@
-import type { ExtensionAPI, FooterComponent } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, readdirSync } from "node:fs";
@@ -18,7 +18,7 @@ import { TmuxITermRenderer } from "./render_tmux_iterm.js";
 import { AsciiRenderer } from "./render_ascii.js";
 import { Animator } from "./animator.js";
 import { createWidgetFactory } from "./widget.js";
-import { SideEditor, findNativeFooter } from "./side-editor.js";
+import { createSideWidgetFactory } from "./side-editor.js";
 import { resolveRenderer } from "./terminal.js";
 
 /** Check if a set directory contains any image frames (PNG files in state subdirs). */
@@ -73,7 +73,6 @@ export default function (pi: ExtensionAPI) {
   let currentEmoteSet = "default";
   let ctxRef: any = null;
   let widgetActive = false;
-  let sideLayoutActive = false;
   let lastResolved = resolveRenderer(config.terminals, userConfiguredTerminals);
   let renderer = createRendererFromResolved(lastResolved, config.size);
 
@@ -183,6 +182,11 @@ export default function (pi: ExtensionAPI) {
 
     clearPreview();
     stopTerminalInput?.();
+    stopTerminalInput = null;
+    if (widgetActive) {
+      ctx.ui.setWidget("emote", undefined);
+      widgetActive = false;
+    }
     animator.clearAllTimers();
     activeTools.clear();
     farewell = false;
@@ -220,21 +224,10 @@ export default function (pi: ExtensionAPI) {
       getCtxRef: () => ctxRef,
       getCurrentEmoteSet: () => currentEmoteSet,
     };
-    if (config.layout === "side") {
-      let footer: FooterComponent | undefined;
-      ctx.ui.setEditorComponent((tui, theme, keybindings) => {
-        footer ??= findNativeFooter(tui);
-        return new SideEditor(tui, theme, keybindings, {
-          ...deps,
-          getTheme: () => ctx.ui.theme,
-          footer,
-        });
-      });
-      if (footer) ctx.ui.setFooter(() => ({ render: () => [], invalidate() {} }));
-      sideLayoutActive = true;
-    } else {
-      ctx.ui.setWidget("emote", createWidgetFactory(deps), { placement: "aboveEditor" });
-    }
+    const factory = config.layout === "side"
+      ? createSideWidgetFactory(deps, () => !ctx.ui.getEditorComponent(), () => ctx.ui.theme)
+      : createWidgetFactory(deps);
+    ctx.ui.setWidget("emote", factory, { placement: "aboveEditor" });
 
     widgetActive = true;
     stopTerminalInput = ctx.ui.onTerminalInput(() => { animator.touch(); });
@@ -252,13 +245,7 @@ export default function (pi: ExtensionAPI) {
     animator.clearAllTimers();
     animator.disposeRenderer();
     if (widgetActive && ctx.hasUI) {
-      if (sideLayoutActive) {
-        ctx.ui.setEditorComponent(undefined);
-        ctx.ui.setFooter(undefined);
-        sideLayoutActive = false;
-      } else {
-        ctx.ui.setWidget("emote", undefined);
-      }
+      ctx.ui.setWidget("emote", undefined);
       widgetActive = false;
     }
     animator.setTui(null);
