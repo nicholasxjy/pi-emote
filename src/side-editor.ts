@@ -1,4 +1,3 @@
-import { FooterComponent } from "@earendil-works/pi-coding-agent";
 import { Container, Editor, type Component, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import { colorStyler, createWidgetFactory, renderFrame, TEXT_CANVAS_COLS, type WidgetDeps } from "./widget.ts";
 
@@ -17,13 +16,15 @@ export function attachSideEditor(
   editor: Editor,
   deps: WidgetDeps,
   getTheme: () => any,
-  renderFooter: (width: number) => string[],
+  below: Container,
   native: boolean,
+  editorSlot: Container,
 ) {
   let active = true;
   let gutter = 0;
   let editorWidth = 0;
   let editorHeight = 0;
+  let belowHeight = 0;
   let mouseCapture: { offset: number; width: number; height: number } | undefined;
   const baseRender = editor.render;
   const baseMouse = editor.handleMouse;
@@ -44,7 +45,9 @@ export function attachSideEditor(
     editorHeight = editorLines.length;
     const [topBorder, ...content] = editorLines;
     if (native && content[0]?.startsWith(" ")) content[0] = theme.fg("accent", "❯") + content[0].slice(1);
-    content.push(...renderFooter(editorWidth));
+    const belowLines = below.render(editorWidth);
+    belowHeight = belowLines.length;
+    content.push(...belowLines);
     if (!gutter || !frame) return editorHeight ? [topBorder, ...content] : content;
 
     const thinkingLevel = deps.pi.getThinkingLevel?.() ?? "high";
@@ -74,13 +77,24 @@ export function attachSideEditor(
     baseSetPadding.call(editor, active ? Math.max(2, padding) : padding);
   };
 
+  // Route below-editor clicks from the slot so interactive widgets retain their own focus target.
+  const baseSlotMouse = editorSlot.handleMouse;
+  const handleSlotMouse = (event: TuiMouseEvent) => {
+    const y = event.y - editorHeight;
+    if (active && event.x >= gutter && event.y < event.height && y >= 0 && y < belowHeight) {
+      return below.handleMouse({ ...event, x: event.x - gutter, y, width: editorWidth, height: belowHeight });
+    }
+    return baseSlotMouse.call(editorSlot, event);
+  };
   const restoreRender = replaceMethod(editor, "render", render);
   const restoreMouse = replaceMethod(editor, "handleMouse", handleMouse);
+  const restoreSlotMouse = replaceMethod(editorSlot, "handleMouse", handleSlotMouse);
   const restoreGetPadding = native ? replaceMethod(editor, "getPaddingX", getPaddingX) : undefined;
   const restoreSetPadding = native ? replaceMethod(editor, "setPaddingX", setPaddingX) : undefined;
-  if (!restoreRender || !restoreMouse || (native && (!restoreGetPadding || !restoreSetPadding))) {
+  if (!restoreRender || !restoreMouse || !restoreSlotMouse || (native && (!restoreGetPadding || !restoreSetPadding))) {
     restoreRender?.();
     restoreMouse?.();
+    restoreSlotMouse?.();
     restoreGetPadding?.();
     restoreSetPadding?.();
     return;
@@ -89,11 +103,13 @@ export function attachSideEditor(
 
   return {
     isAttached: () => editor.render === render && editor.handleMouse === handleMouse
+      && editorSlot.handleMouse === handleSlotMouse
       && (!native || (editor.getPaddingX === getPaddingX && editor.setPaddingX === setPaddingX)),
     dispose() {
       active = false;
       restoreRender();
       restoreMouse();
+      restoreSlotMouse();
       restoreGetPadding?.();
       if (editor.setPaddingX === setPaddingX) baseSetPadding.call(editor, padding);
       restoreSetPadding?.();
@@ -101,12 +117,27 @@ export function attachSideEditor(
   };
 }
 
-function attachNativeFooter(footer: FooterComponent) {
-  const baseRender = footer.render.bind(footer);
-  const hide = (width: number): string[] => footer.render === hide ? [] : baseRender(width);
-  const dispose = replaceMethod(footer, "render", hide);
-  if (!dispose) return;
-  return { render: (width: number) => footer.render === hide ? baseRender(width) : [], dispose };
+function attachBelowEditor(widgets: Container, footer: Container) {
+  const component = new Container();
+  const restores: (() => void)[] = [];
+  const dispose = () => { for (const restore of restores) restore(); };
+  // Pi continues to own the slots and can replace their children at any time.
+  for (const slot of [widgets, footer]) {
+    const baseRender = slot.render.bind(slot);
+    const hide = (width: number): string[] => slot.render === hide ? [] : baseRender(width);
+    const restore = replaceMethod(slot, "render", hide);
+    if (!restore) {
+      dispose();
+      return;
+    }
+    restores.push(restore);
+    component.addChild({
+      render: (width) => slot.render === hide ? baseRender(width) : [],
+      handleMouse: (event) => slot.handleMouse(event),
+      invalidate() {},
+    });
+  }
+  return { component, dispose };
 }
 
 export function createSideWidgetFactory(deps: WidgetDeps, isNativeEditor: () => boolean, getTheme: () => any) {
@@ -115,8 +146,13 @@ export function createSideWidgetFactory(deps: WidgetDeps, isNativeEditor: () => 
     const fallback = fallbackFactory(tui, theme);
     let editor: Component | undefined;
     let side: ReturnType<typeof attachSideEditor>;
-    let nativeFooter: FooterComponent | undefined;
-    let sideFooter: ReturnType<typeof attachNativeFooter>;
+    let below: ReturnType<typeof attachBelowEditor>;
+    const detach = () => {
+      side?.dispose();
+      side = undefined;
+      below?.dispose();
+      below = undefined;
+    };
 
     const widget = {
       render(width: number): string[] {
@@ -126,32 +162,25 @@ export function createSideWidgetFactory(deps: WidgetDeps, isNativeEditor: () => 
         const editorSlot = widgetIndex < 0 ? undefined : slots[widgetIndex + 1];
         const current = editorSlot instanceof Container && editorSlot.children.length === 1 ? editorSlot.children[0] : undefined;
         if (current !== editor) {
-          side?.dispose();
+          detach();
           editor = current;
-          side = undefined;
-          if (current instanceof Editor) {
-            // Pi and other extensions wire callbacks to this instance.
-            side = attachSideEditor(current, deps, getTheme, (width) => sideFooter?.render(width) ?? [], isNativeEditor());
+          const widgetsBelow = slots[widgetIndex + 2];
+          const footer = slots[widgetIndex + 3];
+          if (current instanceof Editor && editorSlot instanceof Container && widgetsBelow instanceof Container && footer instanceof Container) {
+            below = attachBelowEditor(widgetsBelow, footer);
+            if (below) {
+              // Pi and other extensions wire callbacks to this instance.
+              side = attachSideEditor(current, deps, getTheme, below.component, isNativeEditor(), editorSlot);
+              if (!side) detach();
+            }
           }
         }
-        if (side && !side.isAttached()) {
-          side.dispose();
-          side = undefined;
-        }
-        const footerSlot = side ? slots[widgetIndex + 3] : undefined;
-        const candidate = footerSlot instanceof Container && footerSlot.children.length === 1 ? footerSlot.children[0] : undefined;
-        const footer = candidate instanceof FooterComponent && candidate.constructor === FooterComponent ? candidate : undefined;
-        if (footer !== nativeFooter) {
-          sideFooter?.dispose();
-          nativeFooter = footer;
-          sideFooter = footer && attachNativeFooter(footer);
-        }
+        if (side && !side.isAttached()) detach();
         return side ? [] : fallback.render(width);
       },
       invalidate: fallback.invalidate,
       dispose() {
-        side?.dispose();
-        sideFooter?.dispose();
+        detach();
         fallback.dispose();
       },
     };

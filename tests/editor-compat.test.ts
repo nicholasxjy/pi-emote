@@ -48,8 +48,8 @@ async function createHarness(t: TestContext) {
   loaded.runtime.getThinkingLevel = () => "high";
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: 0 });
 
-  const above = new Container(), editorSlot = new Container(), footerSlot = new Container();
-  const tui: any = { terminal: { rows: 30, columns: 100 }, requestRender() {}, hasOverlay: () => false, children: [above, editorSlot, new Container(), footerSlot] };
+  const above = new Container(), editorSlot = new Container(), below = new Container(), footerSlot = new Container();
+  const tui: any = { terminal: { rows: 30, columns: 100 }, requestRender() {}, hasOverlay: () => false, children: [above, editorSlot, below, footerSlot] };
   const kb: any = { matches: (d: string, a: string) => d === "\x1b" && a === "app.interrupt" };
   const submitted: string[] = [];
   const defaultEditor = new CustomEditor(tui, editorTheme, kb);
@@ -66,16 +66,23 @@ async function createHarness(t: TestContext) {
   footerSlot.addChild(defaultFooter);
 
   const widgets = new Map<string, Component & { dispose?: () => void }>();
-  const syncWidgets = () => { above.clear(); above.addChild(new Spacer(1)); for (const w of widgets.values()) above.addChild(w); };
+  const belowWidgets = new Map<string, Component & { dispose?: () => void }>();
+  const syncWidgets = () => {
+    above.clear(); above.addChild(new Spacer(1));
+    for (const w of widgets.values()) above.addChild(w);
+    below.clear();
+    for (const w of belowWidgets.values()) below.addChild(w);
+  };
   syncWidgets();
   const setterCalls = { editor: 0, footer: 0 };
   const ctx: any = {
     hasUI: true, cwd: sandbox, model, sessionManager, getContextUsage: () => session.getContextUsage(),
     ui: {
       theme, notify() {}, onTerminalInput: () => () => {}, getEditorComponent: () => editorFactory,
-      setWidget(key: string, content: any) {
-        widgets.get(key)?.dispose?.(); widgets.delete(key);
-        if (content !== undefined) widgets.set(key, typeof content === "function" ? content(tui, theme) : content);
+      setWidget(key: string, content: any, options?: { placement?: string }) {
+        const target = options?.placement === "belowEditor" ? belowWidgets : widgets;
+        target.get(key)?.dispose?.(); target.delete(key);
+        if (content !== undefined) target.set(key, typeof content === "function" ? content(tui, theme) : content);
         syncWidgets();
       },
       setEditorComponent(factory: any) {
@@ -110,8 +117,8 @@ async function createHarness(t: TestContext) {
     rmSync(sandbox, { recursive: true, force: true });
   });
   const typeAndEnter = (ed: { handleInput(d: string): void }, text: string) => { for (const ch of text) ed.handleInput(ch); ed.handleInput("\r"); };
-  return { ctx, fire, typeAndEnter, defaultEditor, defaultFooter, submitted, widgets, setterCalls,
-    render: (w = 100) => ({ above: above.render(w), editor: editorSlot.render(w), footer: footerSlot.render(w) }) };
+  return { ctx, fire, typeAndEnter, defaultEditor, defaultFooter, submitted, widgets, setterCalls, editorSlot,
+    render: (w = 100) => ({ above: above.render(w), editor: editorSlot.render(w), below: below.render(w), footer: footerSlot.render(w) }) };
 }
 
 test("side-editor compat across load order, custom footer, native restore, and shutdown", async (t) => {
@@ -158,9 +165,9 @@ test("side-editor compat across load order, custom footer, native restore, and s
       });
       const customFooterFrame = h.render();
       assert.equal(h.defaultFooter.render, origFooterRender);
-      assert.ok(customFooterFrame.footer.includes("[CUSTOM-FOOTER]"));
-      assert.ok(customFooterFrame.footer.some((l) => l.includes("(main)")));
-      assert.ok(!customFooterFrame.editor.some((l) => l.includes("(main)")) && customFooterFrame.editor[1].includes("│ PL>"));
+      assert.deepEqual(customFooterFrame.footer, []);
+      assert.ok(customFooterFrame.editor.some((l) => l.startsWith("          │ ") && l.includes("[CUSTOM-FOOTER]")));
+      assert.ok(customFooterFrame.editor.some((l) => l.includes("(main)")) && customFooterFrame.editor[1].includes("│ PL>"));
 
       h.ctx.ui.setFooter(undefined);
       h.ctx.ui.setEditorComponent(undefined);
@@ -187,6 +194,40 @@ test("side-editor compat across load order, custom footer, native restore, and s
   }
 });
 
+test("below-editor widgets and custom footer share the right column and retain their mouse targets", async (t) => {
+  const h = await createHarness(t);
+  const clicks: TuiMouseEvent[] = [];
+  const status = {
+    render: (width: number) => [`[status ${width}]`],
+    handleMouse: (event: TuiMouseEvent) => { clicks.push(event); return { focus: true, capture: true }; },
+    invalidate() {},
+  };
+  const footer = { render: (width: number) => [`[footer ${width}]`], invalidate() {} };
+  await h.fire("session_start");
+  h.render();
+  h.ctx.ui.setWidget("status", () => status, { placement: "belowEditor" });
+  h.ctx.ui.setFooter(() => footer);
+  const wide = h.render();
+  const statusRow = wide.editor.findIndex((line) => line.slice(12) === "[status 88]");
+  assert.equal(statusRow, 3);
+  assert.equal(wide.editor[statusRow + 1].slice(12), "[footer 88]");
+  assert.deepEqual([wide.below, wide.footer], [[], []]);
+
+  const pressed = h.editorSlot.handleMouse({ ...click(16, statusRow), type: "press", height: wide.editor.length });
+  assert.equal(pressed?.focusTarget, status);
+  assert.deepEqual(pressed?.target, { component: status, originX: 12, originY: statusRow, width: 88, height: 1 });
+  assert.deepEqual(clicks.map(({ x, y, width, height }) => [x, y, width, height]), [[4, 0, 88, 1]]);
+  assert.equal(h.editorSlot.handleMouse({ ...click(2, statusRow), height: wide.editor.length }), undefined);
+  assert.equal(clicks.length, 1);
+
+  const narrow = h.render(30);
+  assert.deepEqual(narrow.editor.slice(3), ["[status 30]", "[footer 30]"]);
+  await h.fire("session_shutdown");
+  const restored = h.render();
+  assert.deepEqual([restored.below, restored.footer], [["[status 100]"], ["[footer 100]"]]);
+  assert.equal(h.editorSlot.handleMouse, Container.prototype.handleMouse);
+});
+
 test("standalone fallback activates for locked render property or unsupported component", async (t) => {
   const h = await createHarness(t);
   const origFooterRender = h.defaultFooter.render;
@@ -197,11 +238,13 @@ test("standalone fallback activates for locked render property or unsupported co
     return locked;
   });
 
+  h.ctx.ui.setWidget("status", () => ({ render: (width: number) => [`[status ${width}]`], invalidate() {} }), { placement: "belowEditor" });
   await h.fire("session_start");
   const lockedFrame = h.render();
   assert.equal(lockedFrame.above[1], "─".repeat(100));
   assert.ok(lockedFrame.above.some((l) => l.includes("Test Model")) && h.defaultFooter.render === origFooterRender);
   assert.ok(lockedFrame.footer.length > 0 && lockedFrame.editor[1].startsWith("PL>"));
+  assert.deepEqual(lockedFrame.below, ["[status 100]"]);
   h.typeAndEnter(locked, "locked");
   assert.deepEqual(locked.routed, ["[foreign] locked"]);
 

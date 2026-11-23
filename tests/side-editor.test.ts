@@ -75,7 +75,9 @@ function setup(initialFrame: RenderedFrame | null = { kind: "text", lines: ["(^_
   const keybindings = { matches: (data: string, action: string) => data === "\x1b" && action === "app.interrupt" } as any;
   const editor = new CustomEditor(tui, editorTheme, keybindings, { embedWorkingStatus: true });
   deps.animator.setTui(tui);
-  assert.ok(attachSideEditor(editor, deps, () => theme, (width) => footer.render(width), true));
+  const editorContainer = new Container();
+  editorContainer.addChild(editor);
+  assert.ok(attachSideEditor(editor, deps, () => theme, footerContainer, true, editorContainer));
   editor.focused = true;
   return { editor, deps, tui, footer, session, statuses, renderer, setFrame: (next: RenderedFrame | null) => { frame = next; } };
 }

@@ -120,7 +120,7 @@ Side layout hides pi-emote's model/usage panel and places Pi's editor and native
 
 Compatible custom editors, including Powerline Footer's Bash Mode editor, keep their own input and submission behavior in side layout. If Emote cannot attach to the editor, it uses its standalone widget above the editor until Pi mounts a compatible editor.
 
-Pi's native footer keeps its model, subscription, context, and extension status information beside the avatar. Custom footers stay in their own slot.
+Pi's native footer keeps its model, subscription, context, and extension status information. Custom footers and widgets placed below the editor, including Powerline Footer's bottom bar, also render underneath the input in the right column.
 
 In both layouts, popup overlays temporarily hide the avatar so image rendering cannot cover the popup. The avatar returns when the popup closes.
 
